@@ -2,9 +2,12 @@ package flashsort
 
 import "reflect"
 
-const stackSize = 8
-
-func Slice(slice any, getByte func(i int, iByte int) (b byte, ok bool)) {
+// Slice sorts slice in ascending lexicographic byte order.
+//
+// getByte returns the byte at byteIndex for the element at index. It must
+// return ok=false when byteIndex is past the end of the element's key.
+// Slice panics if slice is not a slice. getByte must not be nil.
+func Slice(slice any, getByte func(i int, byteIndex int) (b byte, ok bool)) {
 	n := reflect.ValueOf(slice).Len()
 	if n < 2 {
 		return
@@ -13,25 +16,25 @@ func Slice(slice any, getByte func(i int, iByte int) (b byte, ok bool)) {
 
 	var ok bool
 	var b, bp, bHi, bLo int
-	var bMax = 256
+	const bucketCount = 256
 	var pn, p0, p, pm int
 	var c, c0 byte
 
 	var bucketVal [256]int
 	var bucketLen [256]int
-	var stackPn [stackSize]int
-	var stackLv [stackSize]int
+	stackPn := make([]int, 1, 10)
+	stackLv := make([]int, 1, 10)
 	var iStack, lv int
 
 	stackPn[0] = n
 
 start:
 	lv = stackLv[iStack] // level
-	pn = stackPn[iStack] // pointer to the end of array
+	pn = stackPn[iStack] // exclusive end of the current partition
 
 	n = pn - p0
-	if n < 8 { // use trivial sort
-		if n == 2 { // sort 2 elements
+	if n < 8 { // use insertion sort for small partitions
+		if n == 2 { // sort two elements
 			for p = p0 + 1; ; lv++ {
 				if c0, ok = getByte(p0, lv); !ok {
 					break
@@ -47,7 +50,7 @@ start:
 					break
 				}
 			}
-		} else if n > 2 { // use bubble sort
+		} else if n > 2 { // use insertion sort
 			for pm = p0 + 1; pm < pn; pm++ {
 				for p = pm; p > p0; p-- {
 					fSwap := false
@@ -72,22 +75,22 @@ start:
 				}
 			}
 		}
-		// break iteration
+		// finish the current partition
 		p0 = pn
 		iStack--
 		goto sub
 	}
 
-	bHi, bLo = 0, bMax
+	bHi, bLo = 0, bucketCount
 
-	// skip NULL values
+	// skip exhausted keys
 	for ; p0 < pn; p0++ {
 		if _, ok = getByte(p0, lv); ok {
 			break
 		}
 	}
 
-	// 1. calc buckets sizes
+	// 1. Count bytes in the current position.
 	for p = p0; p < pn; p++ {
 		if c, ok = getByte(p, lv); ok {
 			b = int(c)
@@ -98,27 +101,27 @@ start:
 			if b > bHi {
 				bHi = b
 			}
-		} else { // move NULL value to the beginning.  p0++
+		} else { // move exhausted keys to the beginning
 			swap(p, p0)
 			p0++
 		}
 	}
 
-	if bHi == 0 { // if countBuckets == 0
+	if bLo == bucketCount { // no keys have another byte
 		iStack--
 		goto sub
 	}
 
-	if bLo == bHi { // if countBuckets == 1
+	if bLo == bHi { // all remaining keys have the same byte
 		bucketLen[bLo] = 0
 		stackLv[iStack]++
 		goto start
 	}
 
-	// 2. set scopes of buckets (pointers to value)
+	// 2. Calculate bucket boundaries.
 
-	// skip NULL values and values with length = 1
-	for b = bLo; bucketLen[b] < 2 && b <= bHi; b++ {
+	// Skip exhausted keys and single-element buckets.
+	for b = bLo; b <= bHi && bucketLen[b] < 2; b++ {
 		if bucketLen[b] > 0 {
 			bucketVal[b] = p0
 			p0++
@@ -126,10 +129,10 @@ start:
 	}
 
 	if p0 != pn {
-		// pre-set size of first sub.bucket for next iteration
+		// Save the first non-trivial bucket for the next iteration.
 		iStack++
-		stackPn[iStack] = p0 + bucketLen[b]
-		stackLv[iStack] = lv + 1
+		stackPn = append(stackPn[:iStack], p0+bucketLen[b])
+		stackLv = append(stackLv[:iStack], lv+1)
 	}
 
 	for p = p0; b <= bHi; b++ {
@@ -137,7 +140,7 @@ start:
 		p += bucketLen[b]
 	}
 
-	// 3. move values into appropriate buckets
+	// 3. Move values into their buckets.
 	for b = bLo; b < bHi; b++ {
 		for bucketLen[b] > 0 {
 			for {
@@ -156,18 +159,18 @@ start:
 	}
 	bucketLen[bHi] = 0
 
-	if p0 == pn { // all buckets has length == 1. rise to up
+	if p0 == pn { // all buckets contain at most one element
 		iStack--
 		goto sub
 	}
 
-	// 4. start processing of sub buckets.  process first sub bucket
+	// 4. Process the first non-trivial child bucket.
 	goto start
 
 sub:
-	// continue processing sub buckets
+	// Continue with the remaining child buckets.
 	if iStack < 0 {
-		// finish sorting
+		// sorting is complete
 		return
 	}
 	pn = stackPn[iStack]
@@ -176,7 +179,7 @@ sub:
 		goto sub
 	}
 
-	// calculate length of current sub-bucket
+	// Find the end of the current child bucket.
 	lv = stackLv[iStack]
 	c, _ = getByte(p0, lv)
 	for p = p0 + 1; p < pn; p++ {
@@ -188,7 +191,7 @@ sub:
 	}
 
 	iStack++
-	stackLv[iStack] = lv + 1
-	stackPn[iStack] = p
+	stackLv = append(stackLv[:iStack], lv+1)
+	stackPn = append(stackPn[:iStack], p)
 	goto start
 }
