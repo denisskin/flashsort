@@ -1,5 +1,9 @@
 # flashsort
 
+<p align="center">
+  <img src="assets/repository-icon-gopher-white.png" alt="flashsort icon" width="160">
+</p>
+
 `flashsort` is an in-place MSD radix sorter for byte-oriented keys in Go. It
 provides specialized functions for strings and byte slices, and a generic
 function for sorting any slice through a byte accessor.
