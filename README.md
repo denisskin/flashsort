@@ -84,6 +84,22 @@ func main() {
 }
 ```
 
+### UTF-8 strings
+
+`Strings` works with UTF-8 text without any special configuration:
+
+```go
+names := []string{"张伟", "Денис", "Alice", "Ζήνων", "Борис"}
+
+flashsort.Strings(names)
+
+fmt.Println(names) // [Alice Ζήνων Борис Денис 张伟]
+```
+
+The result follows Go's lexicographic string order. It is suitable for
+deterministic sorting of UTF-8 keys, but it is not locale-aware alphabetical
+collation.
+
 ### Custom keys
 
 Use `Slice` when the sort key is part of a larger value:
