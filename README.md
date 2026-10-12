@@ -5,6 +5,10 @@
 </p>
 
 <p align="center">
+  <a href="https://pkg.go.dev/github.com/denisskin/flashsort"><img src="https://pkg.go.dev/badge/github.com/denisskin/flashsort.svg" alt="Go Reference"></a>
+</p>
+
+<p align="center">
   <strong>High-performance byte-oriented sorting for Go.</strong><br>
   Sort strings, byte slices, and custom keys up to 3× faster than the standard
   comparison-based approach.
